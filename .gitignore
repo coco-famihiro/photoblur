@@ -4,3 +4,8 @@ src-tauri/target/
 src-tauri/gen/
 *.log
 photoblur_debug.txt
+# PyInstaller 中間ファイル
+build_pyinstaller/
+*.spec
+# サイドカーバイナリ（ビルド生成物）
+src-tauri/binaries/*.exe

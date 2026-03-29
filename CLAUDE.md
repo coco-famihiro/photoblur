@@ -4,12 +4,34 @@
 大量の写真に対してぼかし・モザイク領域を手作業で指定し、一括保存する専用デスクトップアプリ。
 Tauri v2（Rust バックエンド）+ React/TypeScript（フロントエンド）+ Python/OpenCV（画像処理）。
 
-## 起動方法
+## 起動方法（開発）
 ```bash
 cd D:\git\photoblur
 npm run tauri dev
 ```
 Vite dev server: `http://localhost:1421`（`vite.config.ts` で `strictPort: true`）
+
+## リリースビルド（exe インストーラー作成）
+
+```powershell
+# 1. PyInstaller で photo_blur.exe を作成し src-tauri/binaries/ に配置
+.\build_sidecar.ps1
+
+# 2. Tauri でインストーラーをビルド
+npm run tauri build
+# → src-tauri/target/release/bundle/nsis/PhotoBlur_0.1.0_x64-setup.exe
+```
+
+**前提条件（初回のみ）**:
+```bash
+pip install pyinstaller opencv-python numpy
+```
+
+### サイドカーの仕組み
+
+- 開発時: `python photo_blur.py` を呼び出す（PATH の python を使用）
+- リリース時: `photo_blur.exe`（PyInstaller 製）を exe 隣から直接起動
+- `lib.rs` の `build_photo_blur_command()` が自動で切り替える
 
 ## 技術スタック
 - **Tauri v2** — デスクトップアプリフレームワーク

@@ -1,33 +1,39 @@
 use std::path::PathBuf;
 
-/// Locate a Python script: first look next to Cargo.toml (dev), then next to the exe (release).
-fn find_script(name: &str) -> PathBuf {
-    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new("."))
-        .join(name);
-    if dev.exists() {
-        return dev;
-    }
+/// Build a Command that runs photo_blur:
+///   - Release: photo_blur.exe (sidecar, next to our own exe)
+///   - Dev:     python photo_blur.py (from repo root)
+///
+/// In both cases, call `.args([input, regions_json, output])` on the result.
+fn build_photo_blur_command() -> std::process::Command {
+    // Release: look for photo_blur.exe next to our own executable
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            let p = dir.join(name);
-            if p.exists() {
-                return p;
+            let sidecar = dir.join("photo_blur.exe");
+            if sidecar.exists() {
+                return std::process::Command::new(sidecar);
             }
         }
     }
-    PathBuf::from(name)
+
+    // Dev: python + photo_blur.py from repo root (parent of src-tauri/)
+    let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join("photo_blur.py");
+
+    let mut cmd = std::process::Command::new("python");
+    cmd.arg(script);
+    cmd
 }
 
-/// Apply blur / mosaic regions to a single photo via photo_blur.py
+/// Apply blur / mosaic regions to a single photo via photo_blur (exe or py)
 #[tauri::command]
 fn apply_photo_blur(
     input_path: String,
     regions: Vec<serde_json::Value>,
     output_path: String,
 ) -> Result<(), String> {
-    let script = find_script("photo_blur.py");
     let regions_json = serde_json::to_string(&regions)
         .map_err(|e| format!("JSON error: {}", e))?;
 
@@ -36,19 +42,15 @@ fn apply_photo_blur(
             .map_err(|e| format!("Cannot create output folder: {}", e))?;
     }
 
-    let out = std::process::Command::new("python")
-        .args([
-            script.to_str().unwrap_or("photo_blur.py"),
-            &input_path,
-            &regions_json,
-            &output_path,
-        ])
+    let out = build_photo_blur_command()
+        .args([&input_path, &regions_json, &output_path])
         .output()
-        .map_err(|e| format!("Failed to launch Python: {}", e))?;
+        .map_err(|e| format!("Failed to launch photo_blur: {}", e))?;
 
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr);
-        return Err(format!("photo_blur.py failed: {}", stderr));
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        return Err(format!("photo_blur failed:\nstderr: {}\nstdout: {}", stderr, stdout));
     }
     Ok(())
 }
